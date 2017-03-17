@@ -24,3 +24,9 @@ installDarwin:
 clean:
 	rm -f libuWS.so
 	rm -f libuWS.dylib
+
+echo-client:
+	g++ examples/echo-client.cpp -o examples/echo-client -std=c++11 -luWS -lssl -lz
+
+echo-server:
+	g++ examples/echo-server.cpp -o examples/echo-server -std=c++11 -luWS -lssl -lz

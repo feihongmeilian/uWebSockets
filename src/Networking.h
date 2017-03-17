@@ -1,6 +1,6 @@
 #ifndef NETWORKING_UWS_H
 #define NETWORKING_UWS_H
-
+#include <queue>
 #include <openssl/opensslv.h>
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define SSL_CTX_up_ref(x) x->references++
@@ -191,33 +191,22 @@ struct SocketData {
             void *callbackData = nullptr, *reserved = nullptr;
         };
 
-        Message *head = nullptr, *tail = nullptr;
+        bool empty() {return m_db.size() == 0;}
+
+        Message *front() {return m_db.front();}
+
         void pop()
         {
-            Message *nextMessage;
-            if ((nextMessage = head->nextMessage)) {
-                delete [] (char *) head;
-                head = nextMessage;
-            } else {
-                delete [] (char *) head;
-                head = tail = nullptr;
-            }
+            auto message = m_db.front();
+            delete [] (char *)message;
         }
-
-        bool empty() {return head == nullptr;}
-        Message *front() {return head;}
 
         void push(Message *message)
         {
-            message->nextMessage = nullptr;
-            if (tail) {
-                tail->nextMessage = message;
-                tail = message;
-            } else {
-                head = message;
-                tail = message;
-            }
+            m_db.push(message);
         }
+    private:
+	std::queue<Message *> m_db;
     } messageQueue;
 
     Poll *next = nullptr, *prev = nullptr;

@@ -27,11 +27,11 @@ struct WIN32_EXPORT Hub : private uS::Node, public Group<SERVER>, public Group<C
         Group<CLIENT> *group;
     };
 
+    static const int LARGE_BUFFER_SIZE = 300 * 1024;
     z_stream inflationStream = {};
-    char *inflationBuffer;
+    char inflationBuffer[LARGE_BUFFER_SIZE];
     char *inflate(char *data, size_t &length);
     std::string dynamicInflationBuffer;
-    static const int LARGE_BUFFER_SIZE = 300 * 1024;
 
     static void onServerAccept(uS::Socket s);
     static void onClientConnection(uS::Socket s, bool error);
@@ -44,12 +44,10 @@ struct WIN32_EXPORT Hub : private uS::Node, public Group<SERVER>, public Group<C
     Hub(int extensionOptions = 0, bool useDefaultLoop = false) : uS::Node(LARGE_BUFFER_SIZE, WebSocketProtocol<SERVER>::CONSUME_PRE_PADDING, WebSocketProtocol<SERVER>::CONSUME_POST_PADDING, useDefaultLoop),
                                              Group<SERVER>(extensionOptions, this, nodeData), Group<CLIENT>(0, this, nodeData) {
         inflateInit2(&inflationStream, -15);
-        inflationBuffer = new char[LARGE_BUFFER_SIZE];
     }
 
     ~Hub() {
         inflateEnd(&inflationStream);
-        delete [] inflationBuffer;
     }
 
     using uS::Node::run;

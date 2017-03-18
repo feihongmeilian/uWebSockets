@@ -160,7 +160,7 @@ struct HttpResponse {
     HttpResponse *next = nullptr;
     void *userData = nullptr;
     void *extraUserData = nullptr;
-    uS::SocketData::Queue::Message *messageQueue = nullptr;
+    std::queue<uS::SocketData::Message *> messageQueue;
     bool hasEnded = false;
     bool hasHead = false;
 
@@ -232,12 +232,11 @@ struct HttpResponse {
         };
 
         if (httpSocket.getData()->outstandingResponsesHead != this) {
-            uS::SocketData::Queue::Message *messagePtr = httpSocket.allocMessage(HttpTransformer::estimate(message, length));
+            auto *messagePtr = httpSocket.allocMessage(HttpTransformer::estimate(message, length));
             messagePtr->length = HttpTransformer::transform(message, (char *) messagePtr->data, length, transformData);
             messagePtr->callback = callback;
             messagePtr->callbackData = callbackData;
-            messagePtr->nextMessage = messageQueue;
-            messageQueue = messagePtr;
+            messageQueue.push(messagePtr);
             hasEnded = true;
         } else {
             httpSocket.sendTransformed<HttpTransformer>(message, length, callback, callbackData, transformData);
@@ -245,9 +244,8 @@ struct HttpResponse {
             HttpResponse *head = next;
             while (head) {
                 // empty message queue
-                uS::SocketData::Queue::Message *messagePtr = head->messageQueue;
-                while (messagePtr) {
-                    uS::SocketData::Queue::Message *nextMessage = messagePtr->nextMessage;
+                while (head->messageQueue.size()) {
+                    auto *messagePtr = head->messageQueue.front();
 
                     bool wasTransferred;
                     if (httpSocket.write(messagePtr, wasTransferred)) {
@@ -267,7 +265,7 @@ struct HttpResponse {
                         }
                         goto updateHead;
                     }
-                    messagePtr = nextMessage;
+                    head->messageQueue.pop();
                 }
                 // cannot go beyond unfinished responses
                 if (!head->hasEnded) {

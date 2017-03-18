@@ -201,9 +201,7 @@ public:
             return true;
         }
 
-        ListenData *listenData = new ListenData(nodeData);
-        listenData->sslContext = sslContext;
-        listenData->nodeData = nodeData;
+        ListenData *listenData = new ListenData(nodeData,sslContext);
 
         Poll *listenPoll = new Poll(loop, listenFd);
         listenPoll->setData(listenData);
@@ -214,8 +212,6 @@ public:
         listenData->sock = listenFd;
         listenData->ssl = nullptr;
 
-        // should be vector of listen data! one group can have many listeners!
-        nodeData->user = listenData;
         freeaddrinfo(result);
         return false;
     }

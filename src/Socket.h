@@ -159,13 +159,15 @@ public:
         if (!socketData->messageQueue.empty() && ((events & UV_WRITABLE) || SSL_want(socketData->ssl) == SSL_READING)) {
             Socket(p).cork(true);
             while (true) {
-                SocketData::Queue::Message *messagePtr = socketData->messageQueue.front();
+                auto *messagePtr = socketData->messageQueue.front();
                 int sent = SSL_write(socketData->ssl, messagePtr->data, messagePtr->length);
                 if (sent == (ssize_t) messagePtr->length) {
                     if (messagePtr->callback) {
                         messagePtr->callback(p, messagePtr->callbackData, false, messagePtr->reserved);
                     }
                     socketData->messageQueue.pop();
+                    freeMessage(messagePtr);
+
                     if (socketData->messageQueue.empty()) {
                         if ((socketData->poll & UV_WRITABLE) && SSL_want(socketData->ssl) != SSL_WRITING) {
                             // todo, remove bit, don't set directly
@@ -236,13 +238,15 @@ public:
             if (!socketData->messageQueue.empty() && (events & UV_WRITABLE)) {
                 Socket(p).cork(true);
                 while (true) {
-                    SocketData::Queue::Message *messagePtr = socketData->messageQueue.front();
+                    auto *messagePtr = socketData->messageQueue.front();
                     ssize_t sent = ::send(Socket(p).getFd(), messagePtr->data, messagePtr->length, MSG_NOSIGNAL);
                     if (sent == (ssize_t) messagePtr->length) {
                         if (messagePtr->callback) {
                             messagePtr->callback(p, messagePtr->callbackData, false, messagePtr->reserved);
                         }
                         socketData->messageQueue.pop();
+                        freeMessage(messagePtr);
+
                         if (socketData->messageQueue.empty()) {
                             // todo, remove bit, don't set directly
                             socketData->poll = UV_READABLE;
@@ -313,15 +317,14 @@ public:
         return getSocketData()->messageQueue.empty();
     }
 
-    void enqueue(SocketData::Queue::Message *message) {
+    void enqueue(SocketData::Message *message) {
         getSocketData()->messageQueue.push(message);
     }
 
-    SocketData::Queue::Message *allocMessage(size_t length, const char *data = 0) {
-        SocketData::Queue::Message *messagePtr = (SocketData::Queue::Message *) new char[sizeof(SocketData::Queue::Message) + length];
+    static SocketData::Message *allocMessage(size_t length, const char *data = 0) {
+        auto *messagePtr = (SocketData::Message *) new char[sizeof(SocketData::Message) + length];
         messagePtr->length = length;
-        messagePtr->data = ((char *) messagePtr) + sizeof(SocketData::Queue::Message);
-        messagePtr->nextMessage = nullptr;
+        messagePtr->data = ((char *) messagePtr) + sizeof(SocketData::Message);
 
         if (data) {
             memcpy((char *) messagePtr->data, data, messagePtr->length);
@@ -330,7 +333,7 @@ public:
         return messagePtr;
     }
 
-    void freeMessage(SocketData::Queue::Message *message) {
+    static void freeMessage(SocketData::Message *message) {
         delete [] (char *) message;
     }
 
@@ -346,7 +349,7 @@ public:
         }
     }
 
-    bool write(SocketData::Queue::Message *message, bool &wasTransferred) {
+    bool write(SocketData::Message *message, bool &wasTransferred) {
         ssize_t sent = 0;
         SocketData *socketData = getSocketData();
         if (socketData->messageQueue.empty()) {
@@ -397,15 +400,15 @@ public:
 
     template <class T, class D>
     void sendTransformed(const char *message, size_t length, void(*callback)(void *httpSocket, void *data, bool cancelled, void *reserved), void *callbackData, D transformData) {
-        size_t estimatedLength = T::estimate(message, length) + sizeof(uS::SocketData::Queue::Message);
+        size_t estimatedLength = T::estimate(message, length) + sizeof(uS::SocketData::Message);
 
         if (hasEmptyQueue()) {
             if (estimatedLength <= uS::NodeData::preAllocMaxSize) {
                 int memoryLength = estimatedLength;
                 int memoryIndex = getSocketData()->nodeData->getMemoryBlockIndex(memoryLength);
 
-                uS::SocketData::Queue::Message *messagePtr = (uS::SocketData::Queue::Message *) getSocketData()->nodeData->getSmallMemoryBlock(memoryIndex);
-                messagePtr->data = ((char *) messagePtr) + sizeof(uS::SocketData::Queue::Message);
+                auto *messagePtr = (uS::SocketData::Message *) getSocketData()->nodeData->getSmallMemoryBlock(memoryIndex);
+                messagePtr->data = ((char *) messagePtr) + sizeof(uS::SocketData::Message);
                 messagePtr->length = T::transform(message, (char *) messagePtr->data, length, transformData);
 
                 bool wasTransferred;
@@ -426,7 +429,7 @@ public:
                     }
                 }
             } else {
-                uS::SocketData::Queue::Message *messagePtr = allocMessage(estimatedLength - sizeof(uS::SocketData::Queue::Message));
+                auto *messagePtr = allocMessage(estimatedLength - sizeof(uS::SocketData::Message));
                 messagePtr->length = T::transform(message, (char *) messagePtr->data, length, transformData);
 
                 bool wasTransferred;
@@ -448,7 +451,7 @@ public:
                 }
             }
         } else {
-            uS::SocketData::Queue::Message *messagePtr = allocMessage(estimatedLength - sizeof(uS::SocketData::Queue::Message));
+            auto *messagePtr = allocMessage(estimatedLength - sizeof(uS::SocketData::Message));
             messagePtr->length = T::transform(message, (char *) messagePtr->data, length, transformData);
             messagePtr->callback = callback;
             messagePtr->callbackData = callbackData;

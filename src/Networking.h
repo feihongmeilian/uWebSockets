@@ -1,6 +1,6 @@
 #ifndef NETWORKING_UWS_H
 #define NETWORKING_UWS_H
-#include <queue>
+
 #include <openssl/opensslv.h>
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define SSL_CTX_up_ref(x) x->references++
@@ -70,6 +70,7 @@ inline SOCKET dup(SOCKET socket) {
 #include <mutex>
 #include <algorithm>
 #include <memory>
+#include <queue>
 
 namespace uS {
 
@@ -182,40 +183,24 @@ struct SocketData {
 
     }
 
-    struct Queue {
-        struct Message {
-            const char *data;
-            size_t length;
-            Message *nextMessage = nullptr;
-            void (*callback)(void *socket, void *data, bool cancelled, void *reserved) = nullptr;
-            void *callbackData = nullptr, *reserved = nullptr;
-        };
+    struct Message {
+        const char *data;
+        size_t length;
+        void (*callback)(void *socket, void *data, bool cancelled, void *reserved) = nullptr;
+        void *callbackData = nullptr, *reserved = nullptr;
+    };
 
-        bool empty() {return m_db.size() == 0;}
-
-        Message *front() {return m_db.front();}
-
-        void pop()
-        {
-            auto message = m_db.front();
-            delete [] (char *)message;
-        }
-
-        void push(Message *message)
-        {
-            m_db.push(message);
-        }
-    private:
-        std::queue<Message *> m_db;
-    } messageQueue;
+    std::queue<Message *> messageQueue;
 
     Poll *next = nullptr, *prev = nullptr;
 };
 
 struct ListenData : SocketData {
 
-    ListenData(NodeData *nodeData) : SocketData(nodeData) {
-
+    ListenData(NodeData *nodeData, uS::TLS::Context sslContext)
+        : SocketData(nodeData) {
+        this->sslContext = sslContext;
+        this->nodeData->user = this;
     }
 
     Poll *listenPoll = nullptr;

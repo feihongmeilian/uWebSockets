@@ -193,7 +193,7 @@ template <bool isServer>
 void HttpSocket<isServer>::upgrade(const char *secKey, const char *extensions, size_t extensionsLength,
                                    const char *subprotocol, size_t subprotocolLength, bool *perMessageDeflate) {
 
-    uS::SocketData::Queue::Message *messagePtr;
+    uS::SocketData::Message *messagePtr;
 
     if (isServer) {
         *perMessageDeflate = false;
@@ -268,11 +268,12 @@ void HttpSocket<isServer>::onEnd(uS::Socket s) {
     s.close();
 
     while (!httpSocketData->messageQueue.empty()) {
-        uS::SocketData::Queue::Message *message = httpSocketData->messageQueue.front();
+        auto *message = httpSocketData->messageQueue.front();
         if (message->callback) {
             message->callback(nullptr, message->callbackData, true, nullptr);
         }
         httpSocketData->messageQueue.pop();
+        freeMessage(message);
     }
 
     while (httpSocketData->outstandingResponsesHead) {
